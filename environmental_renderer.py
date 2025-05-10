@@ -8,8 +8,8 @@ def main():
         return
     else:
         # print(f"points dimensions: {points.shape}")
-        # print(f"distance: {points[1][2] - points[0][2]}")
-        # print(f"max_height: {max([point[1] for point in points])}")
+        # print(f"distance between points: {points[1][2] - points[0][2]}")
+        # print(f"map height: {max([point[1] for point in points])}")
         if not glfw.init():
             print("Glfw library wasn't initialized")
             return
