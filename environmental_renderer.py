@@ -14,9 +14,11 @@ def get_phong_shaders():
     #version 330 core
     layout (location = 0) in vec3 position;
     layout (location = 1) in vec3 normal;
+    layout(location = 2) in vec3 aColor;
 
     out vec3 FragPos;
     out vec3 Normal;
+    out vec3 VertexColor;
 
     uniform mat4 projection;
     uniform mat4 view;
@@ -24,6 +26,7 @@ def get_phong_shaders():
 
     void main() {
         FragPos = vec3(model * vec4(position, 1.0));
+        VertexColor = aColor;
         Normal = mat3(transpose(inverse(model))) * normal;
         gl_Position = projection * view * model * vec4(position, 1.0);
     }
@@ -34,11 +37,11 @@ def get_phong_shaders():
     in vec3 FragPos;
     in vec3 Normal;
     out vec4 FragColor;
+    in vec3 VertexColor;
 
     uniform vec3 lightPos;
     uniform vec3 viewPos;
     uniform vec3 lightColor;
-    uniform vec3 objectColor;
 
     void main() {
         float ambientStrength = 0.1;
@@ -55,7 +58,7 @@ def get_phong_shaders():
         float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
         vec3 specular = specularStrength * spec * lightColor;
 
-        vec3 result = (ambient + diffuse + specular) * objectColor;
+        vec3 result = (ambient + diffuse + specular) * VertexColor;
         FragColor = vec4(result, 1.0);
     }
     """
@@ -83,6 +86,8 @@ def main():
     glViewport(0, 0, WIDTH, HEIGHT)
     glEnable(GL_DEPTH_TEST)
 
+    colors = get_colors(vertices=vertices)
+
     normals = np.zeros_like(vertices)
     for i in range(0, len(indices), 3):
         v1 = vertices[indices[i]]
@@ -105,6 +110,7 @@ def main():
     VBO = glGenBuffers(1)
     EBO = glGenBuffers(1)
     NBO = glGenBuffers(1)
+    CBO = glGenBuffers(1)
 
     glBindVertexArray(VAO)
 
@@ -117,6 +123,11 @@ def main():
     glBufferData(GL_ARRAY_BUFFER, normals.nbytes, normals, GL_STATIC_DRAW)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * normals.itemsize, ctypes.c_void_p(0))
     glEnableVertexAttribArray(1)
+
+    glBindBuffer(GL_ARRAY_BUFFER, CBO)
+    glBufferData(GL_ARRAY_BUFFER, colors.nbytes, colors, GL_STATIC_DRAW)
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * colors.itemsize, ctypes.c_void_p(0))
+    glEnableVertexAttribArray(2)
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO)
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices, GL_STATIC_DRAW)
@@ -187,7 +198,6 @@ def main():
         glUniform3f(glGetUniformLocation(shader, "lightPos"), center.x, center.y, center.z + 2.0)
         glUniform3f(glGetUniformLocation(shader, "viewPos"), camera_position.x, camera_position.y, camera_position.z)
         glUniform3f(glGetUniformLocation(shader, "lightColor"), 1.0, 1.0, 1.0)
-        glUniform3f(glGetUniformLocation(shader, "objectColor"), 1.0, 1.0, 1.0)  # Biały dla testu
 
         glBindVertexArray(VAO)
         glDrawElements(GL_TRIANGLES, len(indices), GL_UNSIGNED_INT, None)
@@ -199,6 +209,32 @@ def main():
     glDeleteBuffers(1, [EBO])
     glDeleteBuffers(1, [NBO])
     glfw.terminate()
+
+def get_colors(vertices):
+    color_keypoints = np.array([
+    [1, 0, 1], 
+    [0, 0, 1],  
+    [0, 1, 0], 
+    [1, 1, 0],
+    [1, 0, 0],
+    ], dtype=np.float32)
+
+    z = vertices[:, 2]
+    z_min, z_max = z.min(), z.max()
+    normalized = (z - z_min) / (z_max - z_min)
+
+    colors_matrix = np.zeros_like(vertices)
+    segments = len(color_keypoints) - 1
+
+    for i, t in enumerate(normalized):
+        segment = min(int(t * segments), segments - 1)
+        local_t = (t * segments) - segment
+
+        c0 = color_keypoints[segment]
+        c1 = color_keypoints[segment + 1]
+        colors_matrix[i] = (1 - local_t) * c0 + local_t * c1
+    
+    return colors_matrix
 
 if __name__ == "__main__":
     main()
