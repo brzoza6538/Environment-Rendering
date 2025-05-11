@@ -5,6 +5,10 @@ import ctypes
 import glm
 from utils.map_loader import load_map
 
+WIDTH = 1920
+HEIGHT = 1080
+SENSITIVITY = 0.05 # do rotacji
+
 def get_phong_shaders():
     vertex_shader = """
     #version 330 core
@@ -69,14 +73,14 @@ def main():
         print("GLFW initialization failed")
         return
 
-    window = glfw.create_window(1020, 980, "Environmental Renderer", None, None)
+    window = glfw.create_window(WIDTH, HEIGHT, "Environmental Renderer", None, None)
     if not window:
         glfw.terminate()
         print("GLFW window creation failed")
         return
 
     glfw.make_context_current(window)
-    glViewport(0, 0, 1020, 980)
+    glViewport(0, 0, WIDTH, HEIGHT)
     glEnable(GL_DEPTH_TEST)
 
     normals = np.zeros_like(vertices)
@@ -138,7 +142,7 @@ def main():
     glDeleteShader(vs)
     glDeleteShader(fs)
 
-    aspect_ratio = 1020.0 / 980.0
+    aspect_ratio =  WIDTH / HEIGHT
     projection = glm.perspective(glm.radians(45.0), aspect_ratio, 0.1, 100.0)
 
     center = np.mean(vertices, axis=0)
@@ -151,13 +155,13 @@ def main():
         glfw.poll_events()
 
         if glfw.get_key(window, glfw.KEY_W) == glfw.PRESS:
-            x_rotation += 1.0
+            x_rotation += 1.0*SENSITIVITY
         if glfw.get_key(window, glfw.KEY_S) == glfw.PRESS:
-            x_rotation -= 1.0
+            x_rotation -= 1.0*SENSITIVITY
         if glfw.get_key(window, glfw.KEY_A) == glfw.PRESS:
-            z_rotation += 1.0
+            z_rotation += 1.0*SENSITIVITY
         if glfw.get_key(window, glfw.KEY_D) == glfw.PRESS:
-            z_rotation -= 1.0
+            z_rotation -= 1.0*SENSITIVITY
 
         phi = glm.radians(x_rotation)
         theta = glm.radians(z_rotation)
