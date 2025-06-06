@@ -8,7 +8,7 @@ from PIL import Image
 
 WIDTH = 1920
 HEIGHT = 1080
-WATER_HEIGHT = 0.1
+WATER_HEIGHT = 0.02
 SENSITIVITY = 0.05 # do rotacji
 SPEED = 0.01
 
@@ -87,72 +87,67 @@ def get_phong_shaders():
 
     fragment_shader = """
     #version 330 core
-in vec3 FragPos;
-in vec3 Normal;
-out vec4 FragColor;
+    in vec3 FragPos;
+    in vec3 Normal;
+    out vec4 FragColor;
 
-uniform sampler2D tex0;  // sand
-uniform sampler2D tex1;  // grass
-uniform sampler2D tex2;  // rock
+    uniform sampler2D tex0;  // sand
+    uniform sampler2D tex1;  // grass
+    uniform sampler2D tex2;  // rock
+    uniform sampler2D tex_water; // water
 
-uniform vec3 lightPos;
-uniform vec3 viewPos;
-uniform vec3 lightColor;
+    uniform vec3 lightPos;
+    uniform vec3 viewPos;
+    uniform vec3 lightColor;
 
-uniform float minHeight;
-uniform float maxHeight;
+    uniform float minHeight;
+    uniform float maxHeight;
+    uniform float waterLevel;
 
-void main() {
-    // Normalizowanie wysokosci
-    float height = FragPos.z;
-    float normHeight = clamp((height - minHeight) / (maxHeight - minHeight), 0.0, 1.0);
+    void main() {
+        vec2 texCoord = FragPos.xy * 20.0;
+        float specularStrength = 0.3;
+        float shininess = 4.0;
+        vec4 final_color;
 
-    // Nachylenie (dla teksturowania)
-    float slope = 1.0 - dot(normalize(Normal), vec3(0.0, 0.0, 1.0));
+        if (FragPos.z < waterLevel) {
+            // Renderowanie wody
+            final_color = texture(tex_water, texCoord);
+            specularStrength = 0.9;
+            shininess = 128.0;
+        } else {
+            // Renderowanie lądu
+            float height = FragPos.z;
+            float normHeight = clamp((height - minHeight) / (maxHeight - minHeight), 0.0, 1.0);
+            float slope = 1.0 - dot(normalize(Normal), vec3(0.0, 0.0, 1.0));
+            vec4 color_sand = texture(tex0, texCoord);
+            vec4 color_grass = texture(tex1, texCoord);
+            vec4 color_rock = texture(tex2, texCoord);
+            float w_sand = clamp((1.0 - normHeight * 10.0) * (1.0 - slope * 0.14), 0.0, 1.0);
+            float w_grass = clamp((1.0 - abs(normHeight - 0.3) * 5.0) * (1.0 - slope * 0.14), 0.0, 1.0);
+            float w_rock = clamp((normHeight - 0.3) * 5.0 * (0.7 + slope * 0.14), 0.0, 1.0);
+            float sum = w_sand + w_grass + w_rock;
+            if (sum < 0.001) sum = 1.0;
+            w_sand /= sum;
+            w_grass /= sum;
+            w_rock /= sum;
+            final_color = color_sand * w_sand + color_grass * w_grass + color_rock * w_rock;
+        }
 
-    // Skalowanie tekstur
-    vec2 texCoord = FragPos.xy * 20.0;
+        // Oświetlenie Phong
+        vec3 ambient = 0.3 * lightColor;
+        vec3 norm = normalize(Normal);
+        vec3 lightDir = normalize(lightPos - FragPos);
+        float diff = max(dot(norm, lightDir), 0.0);
+        vec3 diffuse = diff * lightColor;
+        vec3 viewDir = normalize(viewPos - FragPos);
+        vec3 reflectDir = reflect(-lightDir, norm);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+        vec3 specular = specularStrength * spec * lightColor;
 
-    // Tekstury
-    vec4 color_sand = texture(tex0, texCoord);
-    vec4 color_grass = texture(tex1, texCoord);
-    vec4 color_rock = texture(tex2, texCoord);
-
-    // Wagi tekstur
-    float w_sand = clamp((1.0 - normHeight * 10.0) * (1.0 - slope * 0.14), 0.0, 1.0);
-    float w_grass = clamp((1.0 - abs(normHeight - 0.3) * 5.0) * (1.0 - slope * 0.14), 0.0, 1.0);
-    float w_rock = clamp((normHeight - 0.3) * 5.0 * (0.7 + slope * 0.14), 0.0, 1.0);
-          
-    // Normalizacja wag
-    float sum = w_sand + w_grass + w_rock;
-    if (sum < 0.001) sum = 1.0;
-
-    w_sand /= sum;
-    w_grass /= sum;
-    w_rock /= sum;
-
-    // Blendowanie tekstur
-    vec4 blended_color = color_sand * w_sand + color_grass * w_grass + color_rock * w_rock;
-
-    // Oświetlenie Phong
-    float ambientStrength = 0.3;
-    vec3 ambient = ambientStrength * lightColor;
-
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightColor;
-
-    float specularStrength = 0.3;
-    vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 4.0);
-    vec3 specular = specularStrength * spec * lightColor;
-
-    vec3 result = (ambient + diffuse + specular) * blended_color.rgb;
-    FragColor = vec4(result, 1.0);
-}
-
+        vec3 result = (ambient + diffuse + specular) * final_color.rgb;
+        FragColor = vec4(result, 1.0);
+    }
     """
     return vertex_shader, fragment_shader
 
@@ -197,6 +192,7 @@ def main():
     texture_sand = load_texture("textures/sand.jpg", 0)
     texture_grass = load_texture("textures/grass.jpg", 1)
     texture_rock = load_texture("textures/rock.jpg", 2)
+    texture_water = load_texture("textures/water.jpg", 3)
 
     normals = np.zeros_like(vertices)
     for i in range(0, len(indices), 3):
@@ -268,6 +264,9 @@ def main():
     glUniform1f(min_loc, float(minHeight))
     glUniform1f(max_loc, float(maxHeight))
 
+    # Przekazanie poziomu wody do shadera
+    glUniform1f(glGetUniformLocation(shader, "waterLevel"), WATER_HEIGHT)
+
     aspect_ratio =  WIDTH / HEIGHT
     projection = glm.perspective(glm.radians(45.0), aspect_ratio, 0.1, 100.0)
 
@@ -308,10 +307,13 @@ def main():
         glActiveTexture(GL_TEXTURE2)
         glBindTexture(GL_TEXTURE_2D, texture_rock)
 
+        glActiveTexture(GL_TEXTURE3)
+        glBindTexture(GL_TEXTURE_2D, texture_water)
+
         glUniform1i(glGetUniformLocation(shader, "tex0"), 0)
         glUniform1i(glGetUniformLocation(shader, "tex1"), 1)
         glUniform1i(glGetUniformLocation(shader, "tex2"), 2)
-
+        glUniform1i(glGetUniformLocation(shader, "tex_water"), 3)
 
         glUniformMatrix4fv(glGetUniformLocation(shader, "projection"), 1, GL_FALSE, np.array(projection.to_list(), dtype=np.float32))
         glUniformMatrix4fv(glGetUniformLocation(shader, "view"), 1, GL_FALSE, np.array(view.to_list(), dtype=np.float32))
