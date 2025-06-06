@@ -8,7 +8,46 @@ from PIL import Image
 
 WIDTH = 1920
 HEIGHT = 1080
+WATER_HEIGHT = 0.1
 SENSITIVITY = 0.05 # do rotacji
+SPEED = 0.01
+
+lastX = WIDTH / 2
+lastY = HEIGHT / 2
+yaw = 0.0
+pitch = 0.0
+first_mouse = True
+
+camera_position = glm.vec3(0.0, -3.0, 1.0)
+camera_front = glm.vec3(0.0, 1.0, -0.2)
+camera_up = glm.vec3(0.0, 0.0, 1.0)
+
+def mouse_callback(window, xpos, ypos):
+    global lastX, lastY, yaw, pitch, first_mouse, camera_front
+
+    if first_mouse:
+        lastX = xpos
+        lastY = ypos
+        first_mouse = False
+
+    xoffset = lastX - xpos
+    yoffset = lastY - ypos
+    lastX = xpos
+    lastY = ypos
+
+    xoffset *= SENSITIVITY
+    yoffset *= SENSITIVITY
+
+    yaw += xoffset
+    pitch += yoffset
+
+    pitch = max(-89.0, min(89.0, pitch))
+
+    direction = glm.vec3()
+    direction.x = np.cos(np.radians(yaw)) * np.cos(np.radians(pitch))
+    direction.y = np.sin(np.radians(yaw)) * np.cos(np.radians(pitch))
+    direction.z = np.sin(np.radians(pitch))
+    camera_front = glm.normalize(direction)
 
 def load_texture(path, texture_unit):
     img = Image.open(path).convert('RGB')
@@ -118,12 +157,26 @@ void main() {
     return vertex_shader, fragment_shader
 
 def main():
+    global camera_position, camera_front, camera_up
+
     vertices, indices = load_map()
     if vertices is None:
         return
 
     # Scale to normalized OpenGL range
     vertices = vertices / 100.0
+
+    min_x, max_x = np.min(vertices[:, 0]), np.max(vertices[:, 0])
+    min_y, max_y = np.min(vertices[:, 1]), np.max(vertices[:, 1])
+
+    quad_vertices = [
+        min_x, WATER_HEIGHT, min_y, 0.0, 0.0,
+        max_x, WATER_HEIGHT, min_y, 1.0, 0.0,
+        min_x, WATER_HEIGHT, max_y, 0.0, 1.0,
+        max_x, WATER_HEIGHT, max_y, 1.0, 1.0,
+    ]
+    
+    quad_indices = [0, 1, 2, 2, 1, 3]
 
     if not glfw.init():
         print("GLFW initialization failed")
@@ -136,6 +189,8 @@ def main():
         return
 
     glfw.make_context_current(window)
+    glfw.set_cursor_pos_callback(window, mouse_callback)
+    glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
     glViewport(0, 0, WIDTH, HEIGHT)
     glEnable(GL_DEPTH_TEST)
 
@@ -218,33 +273,24 @@ def main():
 
     center = np.mean(vertices, axis=0)
     center = glm.vec3(center[0], center[1], center[2])
-    radius = 3.0  # zmniejszony
-    x_rotation = 0.0
-    z_rotation = 0.0
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
 
         if glfw.get_key(window, glfw.KEY_W) == glfw.PRESS:
-            x_rotation += 1.0*SENSITIVITY
+            camera_position += SPEED * camera_front
         if glfw.get_key(window, glfw.KEY_S) == glfw.PRESS:
-            x_rotation -= 1.0*SENSITIVITY
+            camera_position -= SPEED * camera_front
         if glfw.get_key(window, glfw.KEY_A) == glfw.PRESS:
-            z_rotation += 1.0*SENSITIVITY
+            camera_position -= SPEED * glm.normalize(glm.cross(camera_front, camera_up))
         if glfw.get_key(window, glfw.KEY_D) == glfw.PRESS:
-            z_rotation -= 1.0*SENSITIVITY
+            camera_position += SPEED * glm.normalize(glm.cross(camera_front, camera_up))
+        if glfw.get_key(window, glfw.KEY_SPACE) == glfw.PRESS:
+            camera_position += SPEED * camera_up
+        if glfw.get_key(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS:
+            camera_position -= SPEED * camera_up
 
-        phi = glm.radians(x_rotation)
-        theta = glm.radians(z_rotation)
-
-        cam_x = center.x + radius * glm.cos(phi) * glm.cos(theta)
-        cam_y = center.y + radius * glm.cos(phi) * glm.sin(theta)
-        cam_z = center.z + radius * glm.sin(phi)
-
-        camera_position = glm.vec3(cam_x, cam_y, cam_z)
-        up = glm.vec3(0.0, 0.0, 1.0)
-
-        view = glm.lookAt(camera_position, center, up)
+        view = glm.lookAt(camera_position, camera_position + camera_front, camera_up)
         model = glm.mat4(1.0)
 
         glClearColor(0.1, 0.1, 0.2, 1.0)
