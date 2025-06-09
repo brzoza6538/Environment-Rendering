@@ -9,6 +9,7 @@ from PIL import Image
 WIDTH = 1920
 HEIGHT = 1080
 WATER_HEIGHT = 0.02
+SPAWN_HEIGHT = 0.5
 SENSITIVITY = 0.05 # do rotacji
 SPEED = 0.01
 
@@ -17,10 +18,6 @@ lastY = HEIGHT / 2
 yaw = 0.0
 pitch = 0.0
 first_mouse = True
-
-camera_position = glm.vec3(0.0, -3.0, 1.0)
-camera_front = glm.vec3(0.0, 1.0, -0.2)
-camera_up = glm.vec3(0.0, 0.0, 1.0)
 
 def mouse_callback(window, xpos, ypos):
     global lastX, lastY, yaw, pitch, first_mouse, camera_front
@@ -66,6 +63,7 @@ def load_texture(path, texture_unit):
     return tex
 
 def get_phong_shaders():
+    
     vertex_shader = """
     #version 330 core
     layout (location = 0) in vec3 position;
@@ -87,6 +85,7 @@ def get_phong_shaders():
 
     fragment_shader = """
     #version 330 core
+    uniform float time;
     in vec3 FragPos;
     in vec3 Normal;
     out vec4 FragColor;
@@ -106,13 +105,15 @@ def get_phong_shaders():
 
     void main() {
         vec2 texCoord = FragPos.xy * 20.0;
+        vec2 waveOffset = vec2(sin(time + texCoord.x) * 0.2, cos(time + texCoord.y) * 0.2);
+        vec2 waterTexCoord = texCoord + vec2(time * 0.05, time * 0.05) + waveOffset;
         float specularStrength = 0.3;
         float shininess = 4.0;
         vec4 final_color;
 
         if (FragPos.z < waterLevel) {
             // Renderowanie wody
-            final_color = texture(tex_water, texCoord);
+            final_color = texture(tex_water, waterTexCoord);
             specularStrength = 0.9;
             shininess = 128.0;
         } else {
@@ -154,12 +155,22 @@ def get_phong_shaders():
 def main():
     global camera_position, camera_front, camera_up
 
+    start_time = glfw.get_time()
+
     vertices, indices = load_map()
     if vertices is None:
         return
 
     # Scale to normalized OpenGL range
     vertices = vertices / 100.0
+
+    global camera_position, camera_front, camera_up
+
+    center = glm.vec3(np.mean(vertices[:,0]), np.mean(vertices[:,1]), np.mean(vertices[:,2]))
+    camera_position = glm.vec3(center.x, center.y, center.z + SPAWN_HEIGHT)  # 20 jednostek ponad środek
+    center = glm.vec3(np.mean(vertices[:,0]), np.mean(vertices[:,1]), np.mean(vertices[:,2]))
+    camera_front = glm.normalize(center - camera_position)
+    camera_up = glm.vec3(0.0, 0.0, 1.0)
 
     min_x, max_x = np.min(vertices[:, 0]), np.max(vertices[:, 0])
     min_y, max_y = np.min(vertices[:, 1]), np.max(vertices[:, 1])
@@ -275,6 +286,9 @@ def main():
 
     while not glfw.window_should_close(window):
         glfw.poll_events()
+
+        current_time = glfw.get_time() - start_time
+        glUniform1f(glGetUniformLocation(shader, "time"), current_time)
 
         if glfw.get_key(window, glfw.KEY_W) == glfw.PRESS:
             camera_position += SPEED * camera_front
