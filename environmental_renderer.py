@@ -8,7 +8,6 @@ from PIL import Image
 
 WIDTH = 1920
 HEIGHT = 1080
-WATER_HEIGHT = 0.02
 SPAWN_HEIGHT = 0.5
 SENSITIVITY = 0.05 # do rotacji
 SPEED = 0.01
@@ -126,7 +125,7 @@ def get_phong_shaders():
             vec4 color_rock = texture(tex2, texCoord);
             float w_sand = clamp((1.0 - normHeight * 10.0) * (1.0 - slope * 0.14), 0.0, 1.0);
             float w_grass = clamp((1.0 - abs(normHeight - 0.3) * 5.0) * (1.0 - slope * 0.14), 0.0, 1.0);
-            float w_rock = clamp((normHeight - 0.3) * 5.0 * (0.7 + slope * 0.14), 0.0, 1.0);
+            float w_rock = clamp((normHeight - 0.4) * 3.5 * (0.4 + slope * 0.24), 0.0, 1.0);
             float sum = w_sand + w_grass + w_rock;
             if (sum < 0.001) sum = 1.0;
             w_sand /= sum;
@@ -157,7 +156,7 @@ def main():
 
     start_time = glfw.get_time()
 
-    vertices, indices = load_map()
+    vertices, indices, water_height = load_map()
     if vertices is None:
         return
 
@@ -176,10 +175,10 @@ def main():
     min_y, max_y = np.min(vertices[:, 1]), np.max(vertices[:, 1])
 
     quad_vertices = [
-        min_x, WATER_HEIGHT, min_y, 0.0, 0.0,
-        max_x, WATER_HEIGHT, min_y, 1.0, 0.0,
-        min_x, WATER_HEIGHT, max_y, 0.0, 1.0,
-        max_x, WATER_HEIGHT, max_y, 1.0, 1.0,
+        min_x, water_height, min_y, 0.0, 0.0,
+        max_x, water_height, min_y, 1.0, 0.0,
+        min_x, water_height, max_y, 0.0, 1.0,
+        max_x, water_height, max_y, 1.0, 1.0,
     ]
     
     quad_indices = [0, 1, 2, 2, 1, 3]
@@ -271,12 +270,12 @@ def main():
     min_loc = glGetUniformLocation(shader, "minHeight")
     max_loc = glGetUniformLocation(shader, "maxHeight")
 
-    # Wysokości do teksturowania (I może poziomu wody?)
+    # Wysokości do teksturowania
     glUniform1f(min_loc, float(minHeight))
     glUniform1f(max_loc, float(maxHeight))
 
     # Przekazanie poziomu wody do shadera
-    glUniform1f(glGetUniformLocation(shader, "waterLevel"), WATER_HEIGHT)
+    glUniform1f(glGetUniformLocation(shader, "waterLevel"), water_height)
 
     aspect_ratio =  WIDTH / HEIGHT
     projection = glm.perspective(glm.radians(45.0), aspect_ratio, 0.1, 100.0)

@@ -8,6 +8,7 @@ def load_map():
     map_filepath = arguments.map
     distance = arguments.distance
     height = arguments.height
+    water_height = arguments.wheight
 
     try:
         image = imageio.imread(map_filepath, mode='F')
@@ -39,7 +40,7 @@ def load_map():
                 if j < cols - 1 and i < rows - 1:
                     indices.extend([right, bottom, centre])
 
-        return points_3d.reshape(-1, 3), np.array(indices, dtype=np.uint32)
+        return points_3d.reshape(-1, 3), np.array(indices, dtype=np.uint32), water_height
 
     except Exception as e:
         print(f"Error loading the map file. {e}")
