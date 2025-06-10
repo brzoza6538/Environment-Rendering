@@ -9,7 +9,6 @@ from PIL import Image
 
 WIDTH = 1920
 HEIGHT = 1080
-WATER_HEIGHT = 0.02
 SPAWN_HEIGHT = 0.5
 SENSITIVITY = 0.05 # do rotacji
 SPEED = 0.005
@@ -80,8 +79,7 @@ def main():
         return
     start_time = glfw.get_time()
 
-
-    vertices, indices = load_map()
+    vertices, indices, water_height = load_map()
     if vertices is None:
         return
 
@@ -110,10 +108,10 @@ def main():
     min_y, max_y = np.min(vertices[:, 1]), np.max(vertices[:, 1])
 
     quad_vertices = np.array([
-        min_x, min_y, WATER_HEIGHT, 0.0, 0.0,
-        max_x, min_y, WATER_HEIGHT, 1.0, 0.0,
-        min_x, max_y, WATER_HEIGHT, 0.0, 1.0,
-        max_x, max_y, WATER_HEIGHT, 1.0, 1.0,
+        min_x, min_y, water_height, 0.0, 0.0,
+        max_x, min_y, water_height, 1.0, 0.0,
+        min_x, max_y, water_height, 0.0, 1.0,
+        max_x, max_y, water_height, 1.0, 1.0,
     ], dtype=np.float32)
 
     quad_indices = np.array([0, 1, 2, 2, 1, 3], dtype=np.uint32)
@@ -237,7 +235,7 @@ def main():
     min_loc = glGetUniformLocation(shader, "minHeight")
     max_loc = glGetUniformLocation(shader, "maxHeight")
 
-    # Wysokości do teksturowania (I może poziomu wody?)
+    # Wysokości do teksturowania
     glUniform1f(min_loc, float(minHeight))
     glUniform1f(max_loc, float(maxHeight))
 
